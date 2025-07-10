@@ -714,3 +714,17 @@ def get_all_memos(request, text_id):
         
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)})
+
+# 一時的な管理者作成用（使用後は削除）
+def create_initial_admin(request):
+    from django.contrib.auth.models import User
+    from django.http import HttpResponse
+    
+    if not User.objects.filter(username='admin').exists():
+        User.objects.create_superuser(
+            username='admin',
+            email='admin@example.com',
+            password='TempPassword123!'  # 後で変更してください
+        )
+        return HttpResponse('管理者アカウントが作成されました。ログイン後、必ずパスワードを変更してください。')
+    return HttpResponse('管理者アカウントは既に存在します。')

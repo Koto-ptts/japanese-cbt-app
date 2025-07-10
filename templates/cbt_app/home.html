@@ -1,0 +1,31 @@
+{% extends 'cbt_app/base.html' %}
+
+{% block title %}ホーム - 国語CBTアプリ{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 mx-auto text-center">
+        <h1 class="display-4 mb-4">国語CBTアプリ</h1>
+        <p class="lead">テストワイズネスから脱却した革新的な国語読解システム</p>
+        
+        <div class="row mt-5">
+            <div class="col-md-6 mx-auto">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">ログイン</h5>
+                        <p class="card-text">教員または生徒としてログインしてください。</p>
+                        <a href="{% url 'cbt_app:login' %}" class="btn btn-primary btn-lg">ログイン</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="mt-4">
+            <small class="text-muted">
+                ※ アカウントは教員によって管理されています。<br>
+                ログイン情報については担当教員にお尋ねください。
+            </small>
+        </div>
+    </div>
+</div>
+{% endblock %}

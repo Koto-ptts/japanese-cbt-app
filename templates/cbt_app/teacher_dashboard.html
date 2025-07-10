@@ -1,0 +1,82 @@
+{% extends 'cbt_app/base.html' %}
+
+{% block title %}教員ダッシュボード - 国語CBTアプリ{% endblock %}
+
+{% block content %}
+<h2>教員ダッシュボード</h2>
+<p>こんにちは、{{ user.username }}先生</p>
+
+<div class="row">
+    <div class="col-md-4 mb-3">
+        <div class="card bg-primary text-white">
+            <div class="card-body">
+                <h5 class="card-title">生徒管理</h5>
+                <p class="card-text">登録生徒数: {{ student_count }}名</p>
+                <a href="{% url 'cbt_app:manage_students' %}" class="btn btn-light">生徒を管理</a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4 mb-3">
+        <div class="card bg-success text-white">
+            <div class="card-body">
+                <h5 class="card-title">文章管理</h5>
+                <p class="card-text">作成文章数: {{ texts.count }}件</p>
+                <a href="/admin/cbt_app/text/" class="btn btn-light">文章を管理</a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4 mb-3">
+        <div class="card bg-info text-white">
+            <div class="card-body">
+                <h5 class="card-title">問題管理</h5>
+                <p class="card-text">問題作成・編集</p>
+                <a href="/admin/cbt_app/question/" class="btn btn-light">問題を管理</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-12">
+        <h3>作成した文章一覧</h3>
+        {% if texts %}
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>タイトル</th>
+                            <th>作者</th>
+                            <th>作成日</th>
+                            <th>状態</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for text in texts %}
+                        <tr>
+                            <td>{{ text.title }}</td>
+                            <td>{{ text.author|default:"未設定" }}</td>
+                            <td>{{ text.created_at|date:"Y/m/d" }}</td>
+                            <td>
+                                {% if text.is_active %}
+                                    <span class="badge bg-success">有効</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">無効</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <a href="{% url 'cbt_app:text_detail' text.id %}" class="btn btn-sm btn-outline-primary">詳細</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p>まだ文章が作成されていません。<a href="/admin/cbt_app/text/add/">新しい文章を作成</a>してください。</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,69 @@
+{% extends 'cbt_app/base.html' %}
+{% load static %}
+
+{% block title %}{{ text.title }} - 国語CBTアプリ{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h3>{{ text.title }}</h3>
+                {% if text.author %}
+                    <small class="text-muted">作者: {{ text.author }}</small>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                <div class="text-content" data-text-id="{{ text.id }}">
+                    {{ text.content|linebreaks }}
+                </div>
+            </div>
+        </div>
+        
+        <!-- 問題一覧 -->
+        {% if questions %}
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h4>問題</h4>
+                </div>
+                <div class="card-body">
+                    {% for question in questions %}
+                        <div class="mb-3 p-3 border rounded">
+                            <h5>問題 {{ question.order }}</h5>
+                            <p>{{ question.question_text|linebreaks }}</p>
+                            <a href="{% url 'cbt_app:question_detail' question.id %}" class="btn btn-primary">回答する</a>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+    </div>
+    
+    <div class="col-md-4">
+        <!-- 段落番号付与機能と積極的読み分析がここに動的に表示される -->
+        
+        <!-- 使い方ガイド -->
+        <div class="card mt-3">
+            <div class="card-header">
+                <h6>使い方</h6>
+            </div>
+            <div class="card-body">
+                <ul class="list-unstyled small">
+                    <li><strong>段落番号付与:</strong> モードをONにして文章を選択し、段落として登録</li>
+                    <li><strong>🦨 ツールを使って文章を分析してみよう</strong></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="mt-4">
+    <a href="{% url 'cbt_app:dashboard' %}" class="btn btn-secondary">ダッシュボードに戻る</a>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{% static 'js/text_interaction.js' %}"></script>
+<script src="{% static 'js/active_reading.js' %}"></script>
+<script src="{% static 'js/phase_controller.js' %}"></script>
+{% endblock %}

@@ -1,0 +1,39 @@
+{% extends 'cbt_app/base.html' %}
+
+{% block title %}生徒追加 - 国語CBTアプリ{% endblock %}
+
+{% block content %}
+<h2>新しい生徒を追加</h2>
+
+<div class="row">
+    <div class="col-md-6">
+        <form method="post">
+            {% csrf_token %}
+            <div class="mb-3">
+                <label for="username" class="form-label">ユーザー名 <span class="text-danger">*</span></label>
+                <input type="text" class="form-control" id="username" name="username" required>
+                <div class="form-text">ログイン時に使用するユーザー名です。</div>
+            </div>
+            
+            <div class="mb-3">
+                <label for="password" class="form-label">パスワード <span class="text-danger">*</span></label>
+                <input type="password" class="form-control" id="password" name="password" required>
+                <div class="form-text">8文字以上を推奨します。</div>
+            </div>
+            
+            <div class="mb-3">
+                <label for="last_name" class="form-label">姓</label>
+                <input type="text" class="form-control" id="last_name" name="last_name">
+            </div>
+            
+            <div class="mb-3">
+                <label for="first_name" class="form-label">名</label>
+                <input type="text" class="form-control" id="first_name" name="first_name">
+            </div>
+            
+            <button type="submit" class="btn btn-primary">生徒を追加</button>
+            <a href="{% url 'cbt_app:manage_students' %}" class="btn btn-secondary">キャンセル</a>
+        </form>
+    </div>
+</div>
+{% endblock %}

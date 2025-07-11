@@ -13,7 +13,7 @@ from .models import (
     Text, Question, QuestionChoice, UserProfile, StudentResponse, StudentAnnotation,
     StudentActivityLog, ParagraphSummary, ConceptMap, ComparisonTable,
     ArgumentStructure, ActiveReadingContent, UserParagraphDefinition,
-    ReadingSession
+    ReadingSession, QuestionResponse
 )
 
 def home(request):
@@ -78,16 +78,16 @@ def text_detail(request, text_id):
     # フェーズに応じて問題を表示するかどうかを決定
     questions = []
     if session.current_phase == 'answering':
-        # show_in_answering_phaseフィールドを使わずに全ての問題を表示
         questions = Question.objects.filter(text=text).order_by('order')
     
     # 生徒の注釈を取得
     try:
+        user_profile = request.user.userprofile
         annotations = StudentAnnotation.objects.filter(
             student=request.user, 
             text=text
-        ) if not request.user.userprofile.is_teacher else []
-    except:
+        ) if not user_profile.is_teacher else []
+    except UserProfile.DoesNotExist:
         annotations = []
     
     context = {
@@ -101,38 +101,46 @@ def text_detail(request, text_id):
     return render(request, 'cbt_app/text_detail.html', context)
 
 @login_required
-def text_detail(request, text_id):
-    """文章詳細ページ"""
-    text = get_object_or_404(Text, id=text_id, is_active=True)
+def question_detail(request, question_id):
+    """問題詳細ページ"""
+    question = get_object_or_404(Question, id=question_id)
+    text = question.text
     
-    # 読解セッションを取得または作成
-    session, created = ReadingSession.objects.get_or_create(
-        student=request.user,
-        text=text
-    )
+    # 読解セッションを確認
+    try:
+        session = ReadingSession.objects.get(student=request.user, text=text)
+    except ReadingSession.DoesNotExist:
+        messages.error(request, '先に文章を読んでください。')
+        return redirect('cbt_app:text_detail', text_id=text.id)
     
-    # フェーズに応じて問題を表示するかどうかを決定
-    questions = []
-    if session.current_phase == 'answering':
-        # show_in_answering_phaseフィールドを使わずに全ての問題を表示
-        questions = Question.objects.filter(text=text).order_by('order')
+    # 解答フェーズでない場合はリダイレクト
+    if session.current_phase != 'answering':
+        messages.error(request, '解答フェーズに移行してから問題に取り組んでください。')
+        return redirect('cbt_app:text_detail', text_id=text.id)
     
-    # 生徒の注釈を取得
-    annotations = StudentAnnotation.objects.filter(
-        student=request.user, 
-        text=text
-    ) if not request.user.userprofile.is_teacher else []
+    # 既存の回答を取得
+    try:
+        existing_response = QuestionResponse.objects.get(
+            session=session,
+            question=question
+        )
+    except QuestionResponse.DoesNotExist:
+        existing_response = None
+    
+    # 選択肢を取得（選択問題の場合）
+    choices = []
+    if question.question_type == 'choice':
+        choices = QuestionChoice.objects.filter(question=question).order_by('order')
     
     context = {
+        'question': question,
         'text': text,
-        'questions': questions,
-        'annotations': annotations,
-        'current_phase': session.current_phase,
         'session': session,
+        'existing_response': existing_response,
+        'choices': choices,
     }
     
-    return render(request, 'cbt_app/text_detail.html', context)
-
+    return render(request, 'cbt_app/question_detail.html', context)
 
 # 教員専用機能
 def teacher_required(view_func):
@@ -270,38 +278,6 @@ def get_annotations(request, text_id):
         return JsonResponse({
             'success': True,
             'annotations': annotation_data
-        })
-        
-    except Exception as e:
-        return JsonResponse({
-            'success': False,
-            'error': str(e)
-        })
-
-@login_required
-@csrf_exempt
-def log_activity(request):
-    """学習活動をログに記録するAPI"""
-    if request.method != 'POST':
-        return JsonResponse({'success': False, 'error': 'POST method required'})
-    
-    try:
-        data = json.loads(request.body)
-        text_id = data.get('text_id')
-        activity_type = data.get('activity_type')
-        details = data.get('details', {})
-        
-        # ログを保存
-        log_entry = StudentActivityLog.objects.create(
-            student=request.user,
-            text_id=text_id if text_id else None,
-            activity_type=activity_type,
-            details=details
-        )
-        
-        return JsonResponse({
-            'success': True,
-            'log_id': log_entry.id
         })
         
     except Exception as e:
@@ -485,13 +461,15 @@ def save_paragraph_definition(request):
         
         text = get_object_or_404(Text, id=text_id, is_active=True)
         
-        paragraph_def = UserParagraphDefinition.objects.create(
+        paragraph_def, created = UserParagraphDefinition.objects.update_or_create(
             student=request.user,
             text=text,
             paragraph_number=paragraph_number,
-            content=content,
-            start_offset=start_offset,
-            end_offset=end_offset
+            defaults={
+                'content': content,
+                'start_offset': start_offset,
+                'end_offset': end_offset
+            }
         )
         
         return JsonResponse({
@@ -725,3 +703,35 @@ def get_all_memos(request, text_id):
         
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)})
+
+@login_required
+@csrf_exempt
+def log_activity(request):
+    """学習活動をログに記録するAPI"""
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'POST method required'})
+    
+    try:
+        data = json.loads(request.body)
+        text_id = data.get('text_id')
+        activity_type = data.get('activity_type')
+        details = data.get('details', {})
+        
+        # ログを保存
+        log_entry = StudentActivityLog.objects.create(
+            student=request.user,
+            text_id=text_id if text_id else None,
+            activity_type=activity_type,
+            details=details
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'log_id': log_entry.id
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        })

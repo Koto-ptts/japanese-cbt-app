@@ -103,92 +103,70 @@ def text_detail(request, text_id):
 @login_required
 def question_detail(request, question_id):
     """問題詳細ページ"""
+    question = get_object_or_404(Question, id=question_id)
+    
+    # 読解セッションの確認
     try:
-        question = get_object_or_404(Question, id=question_id)
-        
-        # 読解セッションの確認
-        try:
-            session = ReadingSession.objects.get(student=request.user, text=question.text)
-            if session.current_phase != 'answering':
-                messages.error(request, '解答フェーズに移行してから問題に回答してください。')
-                return redirect('cbt_app:text_detail', text_id=question.text.id)
-        except ReadingSession.DoesNotExist:
-            # セッションが存在しない場合は作成
-            session = ReadingSession.objects.create(
-                student=request.user,
-                text=question.text,
-                current_phase='reading'
-            )
-            messages.error(request, '読解フェーズから開始してください。')
+        session = ReadingSession.objects.get(student=request.user, text=question.text)
+        if session.current_phase != 'answering':
+            messages.error(request, '解答フェーズに移行してから問題に回答してください。')
             return redirect('cbt_app:text_detail', text_id=question.text.id)
-        
-        # 既存の回答を取得
+    except ReadingSession.DoesNotExist:
+        messages.error(request, '読解セッションが見つかりません。')
+        return redirect('cbt_app:text_detail', text_id=question.text.id)
+    
+    # 既存の回答を取得
+    try:
+        response = StudentResponse.objects.get(student=request.user, question=question)
+    except StudentResponse.DoesNotExist:
+        response = None
+    
+    if request.method == 'POST':
         try:
-            response = StudentResponse.objects.get(student=request.user, question=question)
-        except StudentResponse.DoesNotExist:
-            response = None
-        
-        if request.method == 'POST':
-            try:
-                # 回答を保存
-                response_text = request.POST.get('response_text', '')
-                selected_choice_id = request.POST.get('selected_choice')
-                confidence_level = request.POST.get('confidence_level', 3)
-                
-                if response:
-                    # 既存の回答を更新
-                    response.response_text = response_text
-                    if selected_choice_id:
-                        try:
-                            selected_choice = QuestionChoice.objects.get(id=selected_choice_id)
-                            response.selected_choice = selected_choice
-                        except QuestionChoice.DoesNotExist:
-                            response.selected_choice = None
+            # 回答を保存
+            response_text = request.POST.get('response_text', '')
+            selected_choice_id = request.POST.get('selected_choice')
+            
+            if response:
+                response.response_text = response_text
+                if selected_choice_id:
                     try:
-                        response.confidence_level = int(confidence_level)
-                    except (ValueError, TypeError):
-                        response.confidence_level = 3
-                    response.save()
-                    messages.success(request, '回答を更新しました。')
-                else:
-                    # 新しい回答を作成
-                    selected_choice = None
-                    if selected_choice_id:
-                        try:
-                            selected_choice = QuestionChoice.objects.get(id=selected_choice_id)
-                        except QuestionChoice.DoesNotExist:
-                            selected_choice = None
-                    
+                        selected_choice = get_object_or_404(QuestionChoice, id=selected_choice_id)
+                        response.selected_choice = selected_choice
+                    except:
+                        pass  # 選択肢が無効な場合はスキップ
+                response.save()
+                messages.success(request, '回答を更新しました。')
+            else:
+                # 新しい回答を作成
+                response_data = {
+                    'student': request.user,
+                    'question': question,
+                    'response_text': response_text,
+                }
+                
+                if selected_choice_id:
                     try:
-                        confidence = int(confidence_level)
-                    except (ValueError, TypeError):
-                        confidence = 3
-                    
-                    response = StudentResponse.objects.create(
-                        student=request.user,
-                        question=question,
-                        response_text=response_text,
-                        selected_choice=selected_choice,
-                        confidence_level=confidence
-                    )
-                    messages.success(request, '回答を保存しました。')
+                        selected_choice = get_object_or_404(QuestionChoice, id=selected_choice_id)
+                        response_data['selected_choice'] = selected_choice
+                    except:
+                        pass  # 選択肢が無効な場合はスキップ
                 
-                return redirect('cbt_app:question_detail', question_id=question_id)
-                
-            except Exception as e:
-                messages.error(request, f'回答の保存中にエラーが発生しました: {str(e)}')
-        
-        context = {
-            'question': question,
-            'response': response,
-            'session': session,
-        }
-        
-        return render(request, 'cbt_app/question_detail.html', context)
-        
-    except Exception as e:
-        messages.error(request, f'問題の読み込み中にエラーが発生しました: {str(e)}')
-        return redirect('cbt_app:dashboard')
+                response = StudentResponse.objects.create(**response_data)
+                messages.success(request, '回答を保存しました。')
+            
+            return redirect('cbt_app:question_detail', question_id=question_id)
+            
+        except Exception as e:
+            messages.error(request, f'回答の保存中にエラーが発生しました: {str(e)}')
+    
+    context = {
+        'question': question,
+        'response': response,
+        'session': session,
+    }
+    
+    return render(request, 'cbt_app/question_detail.html', context)
 
 # 教員専用機能
 def teacher_required(view_func):

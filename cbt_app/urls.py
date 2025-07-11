@@ -43,7 +43,4 @@ urlpatterns = [
     
     # 活動ログAPI
     path('api/log-activity/', views.log_activity, name='log_activity'),
-
-# 一時的な管理者作成用（使用後は削除）
-path('create-initial-admin/', views.create_initial_admin, name='create_initial_admin'),
 ]

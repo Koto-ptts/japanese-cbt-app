@@ -78,16 +78,17 @@ def text_detail(request, text_id):
     # フェーズに応じて問題を表示するかどうかを決定
     questions = []
     if session.current_phase == 'answering':
-        questions = Question.objects.filter(
-            text=text, 
-            show_in_answering_phase=True
-        ).order_by('order')
+        # show_in_answering_phaseフィールドを使わずに全ての問題を表示
+        questions = Question.objects.filter(text=text).order_by('order')
     
     # 生徒の注釈を取得
-    annotations = StudentAnnotation.objects.filter(
-        student=request.user, 
-        text=text
-    ) if not request.user.userprofile.is_teacher else []
+    try:
+        annotations = StudentAnnotation.objects.filter(
+            student=request.user, 
+            text=text
+        ) if not request.user.userprofile.is_teacher else []
+    except:
+        annotations = []
     
     context = {
         'text': text,
@@ -112,7 +113,13 @@ def question_detail(request, question_id):
                 messages.error(request, '解答フェーズに移行してから問題に回答してください。')
                 return redirect('cbt_app:text_detail', text_id=question.text.id)
         except ReadingSession.DoesNotExist:
-            messages.error(request, '読解セッションが見つかりません。')
+            # セッションが存在しない場合は作成
+            session = ReadingSession.objects.create(
+                student=request.user,
+                text=question.text,
+                current_phase='reading'
+            )
+            messages.error(request, '読解フェーズから開始してください。')
             return redirect('cbt_app:text_detail', text_id=question.text.id)
         
         # 既存の回答を取得
@@ -126,8 +133,10 @@ def question_detail(request, question_id):
                 # 回答を保存
                 response_text = request.POST.get('response_text', '')
                 selected_choice_id = request.POST.get('selected_choice')
+                confidence_level = request.POST.get('confidence_level', 3)
                 
                 if response:
+                    # 既存の回答を更新
                     response.response_text = response_text
                     if selected_choice_id:
                         try:
@@ -135,7 +144,12 @@ def question_detail(request, question_id):
                             response.selected_choice = selected_choice
                         except QuestionChoice.DoesNotExist:
                             response.selected_choice = None
+                    try:
+                        response.confidence_level = int(confidence_level)
+                    except (ValueError, TypeError):
+                        response.confidence_level = 3
                     response.save()
+                    messages.success(request, '回答を更新しました。')
                 else:
                     # 新しい回答を作成
                     selected_choice = None
@@ -145,27 +159,28 @@ def question_detail(request, question_id):
                         except QuestionChoice.DoesNotExist:
                             selected_choice = None
                     
+                    try:
+                        confidence = int(confidence_level)
+                    except (ValueError, TypeError):
+                        confidence = 3
+                    
                     response = StudentResponse.objects.create(
                         student=request.user,
                         question=question,
                         response_text=response_text,
-                        selected_choice=selected_choice
+                        selected_choice=selected_choice,
+                        confidence_level=confidence
                     )
+                    messages.success(request, '回答を保存しました。')
                 
-                messages.success(request, '回答を保存しました。')
                 return redirect('cbt_app:question_detail', question_id=question_id)
                 
             except Exception as e:
                 messages.error(request, f'回答の保存中にエラーが発生しました: {str(e)}')
         
-        # 文章の表示制御
-        show_text = not question.hide_text
-        
         context = {
             'question': question,
             'response': response,
-            'show_text': show_text,
-            'allow_notes_only': question.allow_notes_only,
             'session': session,
         }
         
@@ -246,7 +261,7 @@ def edit_student(request, student_id):
     
     return render(request, 'cbt_app/edit_student.html', {'student': student})
 
-# API関数群（以下は元のコードと同じ）
+# API関数群
 
 @login_required
 @csrf_exempt
@@ -766,33 +781,3 @@ def get_all_memos(request, text_id):
         
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)})
-
-# 一時的なスーパーユーザー作成用（使用後は必ず削除）
-from django.contrib.auth.models import User
-from django.http import HttpResponse
-from django.views.decorators.csrf import csrf_exempt
-
-@csrf_exempt
-def create_initial_admin(request):
-    """一時的な管理者作成用エンドポイント（使用後は削除すること）"""
-    if request.method == 'POST':
-        username = 'admin'
-        email = 'admin@example.com'
-        password = 'TempPassword123!'  # 強力なパスワードに変更
-        
-        if not User.objects.filter(username=username).exists():
-            user = User.objects.create_superuser(username, email, password)
-            # 教員プロファイルも作成
-            from .models import UserProfile
-            UserProfile.objects.create(user=user, is_teacher=True)
-            return HttpResponse(f'管理者アカウントが作成されました。<br>ユーザー名: {username}<br>パスワード: {password}<br><br><strong>セキュリティのため、このエンドポイントを削除してください。</strong>')
-        else:
-            return HttpResponse('管理者アカウントは既に存在します。')
-    
-    return HttpResponse('''
-        <form method="post">
-            <h2>初期管理者アカウント作成</h2>
-            <p><strong>警告:</strong> 本番環境では使用後すぐにこの機能を削除してください。</p>
-            <button type="submit">管理者アカウントを作成</button>
-        </form>
-    ''')

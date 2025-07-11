@@ -1,146 +1,234 @@
 {% extends 'cbt_app/base.html' %}
 {% load static %}
 
-{% block title %}問題{{ question.order }} - {{ question.text.title }}{% endblock %}
+{% block title %}{{ question.text.title }} - 問題{{ question.order }} - 国語CBTアプリ{% endblock %}
 
 {% block content %}
 <div class="row">
-    {% if show_text %}
-        <div class="col-md-6">
-            <div class="card">
-                <div class="card-header">
-                    <h5>{{ question.text.title }}</h5>
-                    {% if question.text.author %}
-                        <small class="text-muted">作者: {{ question.text.author }}</small>
-                    {% endif %}
-                </div>
-                <div class="card-body">
-                    <div class="text-content">
-                        {{ question.text.content|linebreaks }}
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-6">
-    {% else %}
-        <div class="col-md-12">
-            <div class="alert alert-warning text-center mb-4">
-                <h5>📵 文章非表示問題</h5>
-                <p>この問題では文章を参照できません。</p>
-                {% if allow_notes_only %}
-                    <p><strong>あなたが作成したメモのみ参照可能です。</strong></p>
-                    <button class="btn btn-info" onclick="showMemos()">📝 メモを確認</button>
+    <div class="col-md-8">
+        <!-- 文章表示エリア（問題設定により制御） -->
+        <div class="card" id="text-display-card" data-hide-text="{{ question.hide_text }}" data-allow-notes-only="{{ question.allow_notes_only }}">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h3>{{ question.text.title }}</h3>
+                {% if question.text.author %}
+                    <small class="text-muted">作者: {{ question.text.author }}</small>
                 {% endif %}
             </div>
-    {% endif %}
-    
-            <div class="card">
-                <div class="card-header">
-                    <h4>問題 {{ question.order }}</h4>
-                </div>
-                <div class="card-body">
-                    <div class="question-text mb-4">
-                        {{ question.question_text|linebreaks }}
+            <div class="card-body">
+                {% if question.hide_text %}
+                    <div class="alert alert-warning">
+                        <h5>📵 文章非表示問題</h5>
+                        <p>この問題では元の文章を参照できません。</p>
+                        {% if question.allow_notes_only %}
+                            <p>作成したメモのみを参考に回答してください。</p>
+                            <button class="btn btn-info" id="show-notes-btn">📝 メモを確認</button>
+                        {% endif %}
                     </div>
+                {% else %}
+                    <div class="text-content" data-text-id="{{ question.text.id }}">
+                        {{ question.text.content|linebreaks }}
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- 問題表示エリア -->
+        <div class="card mt-4">
+            <div class="card-header">
+                <h4>問題 {{ question.order }}</h4>
+                <small class="text-muted">{{ question.get_question_type_display }}</small>
+            </div>
+            <div class="card-body">
+                <div class="question-text mb-4">
+                    {{ question.question_text|linebreaks }}
+                </div>
+
+                <!-- 回答フォーム -->
+                <form method="post" id="answer-form">
+                    {% csrf_token %}
                     
-                    <form method="post">
-                        {% csrf_token %}
-                        
-                        {% if question.question_type == 'choice' %}
-                            <!-- 選択問題 -->
+                    {% if question.question_type == 'choice' %}
+                        <!-- 選択問題 -->
+                        <div class="mb-3">
+                            <label class="form-label">選択肢から答えを選んでください：</label>
                             {% for choice in question.choices.all %}
-                                <div class="form-check mb-2">
-                                    <input class="form-check-input" type="radio" 
-                                           name="selected_choice" value="{{ choice.id }}" 
-                                           id="choice{{ choice.id }}"
-                                           {% if response.selected_choice.id == choice.id %}checked{% endif %}>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="selected_choice" 
+                                           id="choice{{ choice.id }}" value="{{ choice.id }}"
+                                           {% if response and response.selected_choice.id == choice.id %}checked{% endif %}>
                                     <label class="form-check-label" for="choice{{ choice.id }}">
                                         {{ choice.choice_text }}
                                     </label>
                                 </div>
                             {% endfor %}
-                        {% else %}
-                            <!-- 記述問題 -->
-                            <div class="mb-3">
-                                <label for="response_text" class="form-label">回答</label>
-                                <textarea class="form-control" id="response_text" name="response_text" 
-                                          rows="8" placeholder="ここに回答を記述してください...">{% if response %}{{ response.response_text }}{% endif %}</textarea>
-                            </div>
-                        {% endif %}
-                        
-                        <div class="d-flex justify-content-between">
-                            <button type="submit" class="btn btn-primary">回答を保存</button>
-                            <a href="{% url 'cbt_app:text_detail' question.text.id %}" class="btn btn-secondary">問題一覧に戻る</a>
                         </div>
-                    </form>
-                </div>
+                    {% else %}
+                        <!-- 記述問題 -->
+                        <div class="mb-3">
+                            <label for="response_text" class="form-label">回答を記述してください：</label>
+                            <textarea class="form-control" id="response_text" name="response_text" 
+                                      rows="8" placeholder="ここに回答を記述してください...">{% if response %}{{ response.response_text }}{% endif %}</textarea>
+                        </div>
+                    {% endif %}
+
+                    <!-- 送信ボタン -->
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">💾 回答を保存</button>
+                        <a href="{% url 'cbt_app:text_detail' question.text.id %}" class="btn btn-secondary">📚 文章に戻る</a>
+                    </div>
+                </form>
+
+                {% if response %}
+                    <div class="mt-3">
+                        <small class="text-muted">
+                            最終更新: {{ response.updated_at|date:"Y/m/d H:i" }}
+                        </small>
+                    </div>
+                {% endif %}
             </div>
         </div>
-</div>
-
-<!-- メモ表示用モーダル -->
-<div class="modal fade" id="memosModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">📝 あなたが作成したメモ</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+    </div>
+    
+    <div class="col-md-4">
+        <!-- メモ表示エリア -->
+        <div class="card">
+            <div class="card-header">
+                <h6>📝 作成したメモ</h6>
             </div>
-            <div class="modal-body" id="memosContent">
-                <!-- メモの内容がここに表示される -->
+            <div class="card-body">
+                <button class="btn btn-info w-100" onclick="showAllMemos()">
+                    📝 すべてのメモを確認
+                </button>
+                <small class="text-muted d-block mt-2">
+                    読解フェーズで作成したメモを確認できます
+                </small>
+            </div>
+        </div>
+
+        <!-- 使い方ガイド -->
+        <div class="card mt-3">
+            <div class="card-header">
+                <h6>💡 ヒント</h6>
+            </div>
+            <div class="card-body">
+                <ul class="list-unstyled small">
+                    <li><strong>文章非表示問題:</strong> 作成したメモのみを参考に回答</li>
+                    <li><strong>記述問題:</strong> 具体的で詳細な回答を心がける</li>
+                    <li><strong>選択問題:</strong> 各選択肢を慎重に検討する</li>
+                </ul>
             </div>
         </div>
     </div>
 </div>
-
 {% endblock %}
 
 {% block scripts %}
 <script>
-function showMemos() {
-    fetch(`/api/get-all-memos/{{ question.text.id }}/`)
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                displayMemos(data.memos);
-                new bootstrap.Modal(document.getElementById('memosModal')).show();
-            }
-        });
-}
-
-function displayMemos(memos) {
-    const content = document.getElementById('memosContent');
-    if (memos.length === 0) {
-        content.innerHTML = '<p class="text-muted">まだメモが作成されていません。</p>';
+function showAllMemos() {
+    const textId = document.querySelector('[data-text-id]')?.getAttribute('data-text-id');
+    if (!textId) {
+        alert('文章IDが見つかりません。');
         return;
     }
     
-    const groupedMemos = {};
-    memos.forEach(memo => {
-        if (!groupedMemos[memo.type]) {
-            groupedMemos[memo.type] = [];
+    fetch(`/api/get-all-memos/${textId}/`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                displayMemosModal(data.memos);
+            } else {
+                alert('メモの読み込みに失敗しました。');
+            }
+        })
+        .catch(error => {
+            console.error('メモ読み込みエラー:', error);
+            alert('メモの読み込み中にエラーが発生しました。');
+        });
+}
+
+function displayMemosModal(memos) {
+    const modal = document.createElement('div');
+    modal.className = 'memos-modal';
+    modal.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.8);
+        z-index: 2000;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    `;
+
+    modal.innerHTML = `
+        <div class="modal-content" style="
+            background-color: white;
+            border-radius: 8px;
+            padding: 30px;
+            max-width: 90vw;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        ">
+            <div class="modal-header d-flex justify-content-between align-items-center mb-4">
+                <h3>📝 あなたが作成したメモ</h3>
+                <button class="btn btn-outline-secondary close-modal-btn">✕ 閉じる</button>
+            </div>
+            <div class="modal-body">
+                ${generateMemosDisplay(memos)}
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal || e.target.classList.contains('close-modal-btn')) {
+            modal.remove();
         }
-        groupedMemos[memo.type].push(memo);
     });
-    
+}
+
+function generateMemosDisplay(memos) {
+    if (memos.length === 0) {
+        return '<p class="text-muted">まだメモが作成されていません。</p>';
+    }
+
+    const groupedMemos = groupMemosByType(memos);
     let html = '';
+
     Object.keys(groupedMemos).forEach(type => {
         const typeLabel = getTypeLabel(type);
-        html += `<h6>${typeLabel}</h6>`;
-        groupedMemos[type].forEach(memo => {
-            html += `
-                <div class="card mb-2">
-                    <div class="card-body">
-                        <h6 class="card-title">${memo.title}</h6>
-                        <p class="card-text">${formatMemoContent(memo)}</p>
+        const typeMemos = groupedMemos[type];
+        
+        html += `
+            <div class="memo-section mb-4">
+                <h5>${typeLabel}</h5>
+                ${typeMemos.map(memo => `
+                    <div class="memo-item p-3 border rounded mb-2">
+                        <h6>${memo.title}</h6>
+                        ${formatMemoContent(memo)}
                         <small class="text-muted">${new Date(memo.created_at).toLocaleString('ja-JP')}</small>
                     </div>
-                </div>
-            `;
-        });
+                `).join('')}
+            </div>
+        `;
     });
-    
-    content.innerHTML = html;
+
+    return html;
+}
+
+function groupMemosByType(memos) {
+    const grouped = {};
+    memos.forEach(memo => {
+        if (!grouped[memo.type]) {
+            grouped[memo.type] = [];
+        }
+        grouped[memo.type].push(memo);
+    });
+    return grouped;
 }
 
 function getTypeLabel(type) {
@@ -156,16 +244,22 @@ function getTypeLabel(type) {
 }
 
 function formatMemoContent(memo) {
-    if (memo.content) return memo.content;
-    
     const data = memo.data;
     switch (memo.type) {
         case 'logic-structure':
-            return `関係: ${data.logicType}<br>分析: ${data.description}`;
+            return `<p><strong>関係:</strong> ${data.logicType}<br><strong>分析:</strong> ${data.description}</p>`;
         case 'causal-map':
-            return `原因: ${data.cause}<br>結果: ${data.effect}`;
+            return `<p><strong>原因:</strong> ${data.cause}<br><strong>結果:</strong> ${data.effect}<br><strong>分析:</strong> ${data.analysis}</p>`;
+        case 'concept-map':
+            return `<p><strong>中心概念:</strong> ${data.centralConcept}<br><strong>関連概念:</strong> ${data.relatedConcept}<br><strong>関係:</strong> ${data.relationship}</p>`;
+        case 'argument-analysis':
+            return `<p><strong>要素:</strong> ${data.elementType}<br><strong>内容:</strong> ${data.content}</p>`;
+        case 'perspective-analysis':
+            return `<p><strong>視点:</strong> ${data.viewpoint}<br><strong>解釈:</strong> ${data.interpretation}</p>`;
+        case 'paragraph':
+            return `<p>${memo.content}</p>`;
         default:
-            return JSON.stringify(data);
+            return `<p>${memo.content || JSON.stringify(data)}</p>`;
     }
 }
 </script>

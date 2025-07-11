@@ -43,7 +43,7 @@ class Question(models.Model):
     order = models.IntegerField(default=1, verbose_name="順序")
     hide_text = models.BooleanField(default=False, verbose_name="文章を隠す")
     allow_notes_only = models.BooleanField(default=False, verbose_name="メモのみ参照可能")
-    show_in_answering_phase = models.BooleanField(default=True, verbose_name="解答フェーズで表示")
+    show_in_answering_phase = models.BooleanField(default=True, verbose_name="解答フェーズで表示")  # この行を追加
     created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:

@@ -766,3 +766,33 @@ def get_all_memos(request, text_id):
         
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)})
+
+# 一時的なスーパーユーザー作成用（使用後は必ず削除）
+from django.contrib.auth.models import User
+from django.http import HttpResponse
+from django.views.decorators.csrf import csrf_exempt
+
+@csrf_exempt
+def create_initial_admin(request):
+    """一時的な管理者作成用エンドポイント（使用後は削除すること）"""
+    if request.method == 'POST':
+        username = 'admin'
+        email = 'admin@example.com'
+        password = 'TempPassword123!'  # 強力なパスワードに変更
+        
+        if not User.objects.filter(username=username).exists():
+            user = User.objects.create_superuser(username, email, password)
+            # 教員プロファイルも作成
+            from .models import UserProfile
+            UserProfile.objects.create(user=user, is_teacher=True)
+            return HttpResponse(f'管理者アカウントが作成されました。<br>ユーザー名: {username}<br>パスワード: {password}<br><br><strong>セキュリティのため、このエンドポイントを削除してください。</strong>')
+        else:
+            return HttpResponse('管理者アカウントは既に存在します。')
+    
+    return HttpResponse('''
+        <form method="post">
+            <h2>初期管理者アカウント作成</h2>
+            <p><strong>警告:</strong> 本番環境では使用後すぐにこの機能を削除してください。</p>
+            <button type="submit">管理者アカウントを作成</button>
+        </form>
+    ''')

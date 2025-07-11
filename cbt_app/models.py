@@ -7,6 +7,10 @@ class UserProfile(models.Model):
     is_teacher = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     
+    class Meta:
+        verbose_name = "ユーザープロファイル"
+        verbose_name_plural = "ユーザープロファイル"
+    
     def __str__(self):
         return f"{self.user.username} - {'教員' if self.is_teacher else '生徒'}"
 
@@ -39,6 +43,7 @@ class Question(models.Model):
     order = models.IntegerField(default=1, verbose_name="順序")
     hide_text = models.BooleanField(default=False, verbose_name="文章を隠す")
     allow_notes_only = models.BooleanField(default=False, verbose_name="メモのみ参照可能")
+    show_in_answering_phase = models.BooleanField(default=True, verbose_name="解答フェーズで表示")
     created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:
@@ -118,10 +123,7 @@ class StudentActivityLog(models.Model):
     def __str__(self):
         return f"{self.student.username} - {self.activity_type} - {self.timestamp}"
 
-# 既存のモデルの後に追加
-
 class ParagraphSummary(models.Model):
-    """段落要旨"""
     student = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="生徒")
     text = models.ForeignKey(Text, on_delete=models.CASCADE, verbose_name="対象文章")
     paragraph_number = models.IntegerField(verbose_name="段落番号")
@@ -140,7 +142,6 @@ class ParagraphSummary(models.Model):
         return f"{self.student.username} - {self.text.title} - 段落{self.paragraph_number}"
 
 class ConceptMap(models.Model):
-    """概念マップ"""
     student = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="生徒")
     text = models.ForeignKey(Text, on_delete=models.CASCADE, verbose_name="対象文章")
     map_data = models.JSONField(default=dict, verbose_name="マップデータ")
@@ -156,7 +157,6 @@ class ConceptMap(models.Model):
         return f"{self.student.username} - {self.text.title} - 概念マップ"
 
 class ComparisonTable(models.Model):
-    """比較表"""
     student = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="生徒")
     text = models.ForeignKey(Text, on_delete=models.CASCADE, verbose_name="対象文章")
     table_data = models.JSONField(default=dict, verbose_name="表データ")
@@ -172,7 +172,6 @@ class ComparisonTable(models.Model):
         return f"{self.student.username} - {self.text.title} - 比較表"
 
 class ArgumentStructure(models.Model):
-    """論証構造"""
     student = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="生徒")
     text = models.ForeignKey(Text, on_delete=models.CASCADE, verbose_name="対象文章")
     claims = models.JSONField(default=list, verbose_name="主張")
@@ -190,7 +189,6 @@ class ArgumentStructure(models.Model):
         return f"{self.student.username} - {self.text.title} - 論証構造"
 
 class ActiveReadingContent(models.Model):
-    """積極的読み分析コンテンツ"""
     CONTENT_TYPES = [
         ('logic-structure', '論理構造分析'),
         ('causal-map', '因果関係マップ'),
@@ -214,11 +212,8 @@ class ActiveReadingContent(models.Model):
     
     def __str__(self):
         return f"{self.student.username} - {self.title}"
-    
-    # 既存のモデルの後に追加
 
 class UserParagraphDefinition(models.Model):
-    """ユーザー定義段落"""
     student = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="生徒")
     text = models.ForeignKey(Text, on_delete=models.CASCADE, verbose_name="対象文章")
     paragraph_number = models.IntegerField(verbose_name="段落番号")
@@ -236,10 +231,7 @@ class UserParagraphDefinition(models.Model):
     def __str__(self):
         return f"{self.student.username} - {self.text.title} - 段落{self.paragraph_number}"
 
-# cbt_app/models.py に追加
-
 class ReadingSession(models.Model):
-    """読解セッション管理"""
     PHASE_CHOICES = [
         ('reading', '読解フェーズ'),
         ('answering', '解答フェーズ'),
@@ -263,7 +255,6 @@ class ReadingSession(models.Model):
         return f"{self.student.username} - {self.text.title} - {self.get_current_phase_display()}"
 
 class QuestionResponse(models.Model):
-    """問題回答（解答フェーズ専用）"""
     session = models.ForeignKey(ReadingSession, on_delete=models.CASCADE, verbose_name="セッション")
     question = models.ForeignKey(Question, on_delete=models.CASCADE, verbose_name="問題")
     response_text = models.TextField(blank=True, verbose_name="回答内容")
@@ -276,3 +267,6 @@ class QuestionResponse(models.Model):
         verbose_name = "問題回答"
         verbose_name_plural = "問題回答"
         unique_together = ['session', 'question']
+    
+    def __str__(self):
+        return f"{self.session.student.username} - {self.question} - {self.created_at}"

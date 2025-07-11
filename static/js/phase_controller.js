@@ -9,6 +9,7 @@ class PhaseController {
     init() {
         this.loadCurrentSession();
         this.setupPhaseControls();
+        this.hideQuestionsInReadingPhase(); // 初期状態で問題を非表示
     }
 
     loadCurrentSession() {
@@ -19,7 +20,11 @@ class PhaseController {
                     this.currentPhase = data.session.current_phase;
                     this.sessionId = data.session.id;
                     this.updatePhaseDisplay();
+                    this.controlQuestionsVisibility();
                 }
+            })
+            .catch(error => {
+                console.error('セッション読み込みエラー:', error);
             });
     }
 
@@ -35,21 +40,30 @@ class PhaseController {
                 <div class="card-body">
                     <div id="reading-phase-content">
                         <p>文章をじっくり読み、分析ツールを使って理解を深めてください。</p>
+                        <div class="alert alert-info">
+                            <strong>📚 読解フェーズ</strong><br>
+                            このフェーズでは問題は表示されません。文章の理解に集中してください。
+                        </div>
                         <button class="btn btn-success btn-lg w-100" id="complete-reading-btn">
                             ✅ 読解を完了して解答フェーズへ進む
                         </button>
                         <small class="text-muted d-block mt-2">
-                            ※ 解答フェーズでは文章を見ることができません
+                            ※ 解答フェーズでは文章の表示が制限されます
                         </small>
                     </div>
                     <div id="answering-phase-content" style="display: none;">
-                        <p>あなたが作成したメモを参考に問題に答えてください。</p>
-                        <button class="btn btn-primary" id="view-memos-btn">
-                            📝 作成したメモを確認
-                        </button>
-                        <button class="btn btn-warning" id="back-to-reading-btn">
-                            ↩️ 読解フェーズに戻る
-                        </button>
+                        <div class="alert alert-warning">
+                            <strong>✏️ 解答フェーズ</strong><br>
+                            問題に答えてください。文章の表示は問題設定により制限されます。
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-primary flex-fill" id="view-memos-btn">
+                                📝 作成したメモを確認
+                            </button>
+                            <button class="btn btn-warning flex-fill" id="back-to-reading-btn">
+                                ↩️ 読解フェーズに戻る
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -74,7 +88,7 @@ class PhaseController {
     }
 
     transitionToAnsweringPhase() {
-        if (!confirm('読解フェーズを完了して解答フェーズに進みますか？\n解答フェーズでは文章を見ることができません。')) {
+        if (!confirm('読解フェーズを完了して解答フェーズに進みますか？\n解答フェーズでは文章の表示が制限されます。')) {
             return;
         }
 
@@ -94,9 +108,13 @@ class PhaseController {
                 this.currentPhase = 'answering';
                 this.sessionId = data.session_id;
                 this.updatePhaseDisplay();
-                this.hideTextContent();
-                this.showQuestions();
+                this.controlQuestionsVisibility();
+                this.controlTextVisibility();
             }
+        })
+        .catch(error => {
+            console.error('フェーズ移行エラー:', error);
+            alert('フェーズの移行に失敗しました。');
         });
     }
 
@@ -118,9 +136,13 @@ class PhaseController {
             if (data.success) {
                 this.currentPhase = 'reading';
                 this.updatePhaseDisplay();
+                this.controlQuestionsVisibility();
                 this.showTextContent();
-                this.hideQuestions();
             }
+        })
+        .catch(error => {
+            console.error('フェーズ移行エラー:', error);
+            alert('フェーズの移行に失敗しました。');
         });
     }
 
@@ -140,19 +162,74 @@ class PhaseController {
         }
     }
 
-    hideTextContent() {
-        const textContent = document.querySelector('.text-content');
-        const textCard = textContent.closest('.card');
-        textCard.style.display = 'none';
+    controlQuestionsVisibility() {
+        const questionsCard = this.findQuestionsCard();
+        if (!questionsCard) return;
 
-        // 文章非表示の警告を表示
+        if (this.currentPhase === 'reading') {
+            // 読解フェーズでは問題を非表示
+            questionsCard.style.display = 'none';
+        } else if (this.currentPhase === 'answering') {
+            // 解答フェーズでは問題を表示
+            questionsCard.style.display = 'block';
+            this.setupQuestionTextVisibility();
+        }
+    }
+
+    hideQuestionsInReadingPhase() {
+        const questionsCard = this.findQuestionsCard();
+        if (questionsCard) {
+            questionsCard.style.display = 'none';
+        }
+    }
+
+    findQuestionsCard() {
+        // 問題カードを探す（複数の方法で試行）
+        let questionsCard = document.querySelector('.card h4');
+        if (questionsCard && questionsCard.textContent.includes('問題')) {
+            return questionsCard.closest('.card');
+        }
+
+        // 代替方法：問題を含むカードを探す
+        const cards = document.querySelectorAll('.card');
+        for (let card of cards) {
+            const header = card.querySelector('.card-header h4');
+            if (header && header.textContent.includes('問題')) {
+                return card;
+            }
+        }
+
+        return null;
+    }
+
+    setupQuestionTextVisibility() {
+        // 各問題の文章表示制御を設定
+        const questionItems = document.querySelectorAll('[data-question-id]');
+        questionItems.forEach(item => {
+            const hideText = item.dataset.hideText === 'true';
+            const allowNotesOnly = item.dataset.allowNotesOnly === 'true';
+            
+            if (hideText) {
+                this.addTextHiddenWarning(item);
+            }
+        });
+    }
+
+    addTextHiddenWarning(questionElement) {
         const warning = document.createElement('div');
-        warning.className = 'alert alert-warning text-center';
+        warning.className = 'alert alert-warning mt-2';
         warning.innerHTML = `
-            <h4>📵 解答フェーズ</h4>
-            <p>文章は非表示になっています。<br>あなたが作成したメモのみを参考に問題に答えてください。</p>
+            <strong>📵 文章非表示問題</strong><br>
+            この問題では元の文章を参照できません。作成したメモのみを参考に回答してください。
         `;
-        textCard.parentNode.insertBefore(warning, textCard);
+        questionElement.appendChild(warning);
+    }
+
+    controlTextVisibility() {
+        // 解答フェーズでの文章表示制御（将来の拡張用）
+        if (this.currentPhase === 'answering') {
+            // 必要に応じて文章の表示/非表示を制御
+        }
     }
 
     showTextContent() {
@@ -160,8 +237,12 @@ class PhaseController {
         textCard.style.display = 'block';
         
         // 警告メッセージを削除
-        const warning = document.querySelector('.alert-warning');
-        if (warning) warning.remove();
+        const warnings = document.querySelectorAll('.alert-warning');
+        warnings.forEach(warning => {
+            if (warning.textContent.includes('文章は非表示')) {
+                warning.remove();
+            }
+        });
     }
 
     showMemosModal() {
@@ -171,6 +252,9 @@ class PhaseController {
                 if (data.success) {
                     this.displayMemosModal(data.memos);
                 }
+            })
+            .catch(error => {
+                console.error('メモ読み込みエラー:', error);
             });
     }
 
@@ -272,7 +356,6 @@ class PhaseController {
     }
 
     formatMemoContent(memo) {
-        // メモの内容を読みやすく整形
         const data = memo.data;
         switch (memo.type) {
             case 'logic-structure':
@@ -289,24 +372,6 @@ class PhaseController {
                 return `<p>${memo.content}</p>`;
             default:
                 return `<p>${memo.content || JSON.stringify(data)}</p>`;
-        }
-    }
-
-    showQuestions() {
-        // 問題セクションを表示
-        const questionsCard = document.querySelector('.card h4');
-        if (questionsCard) {
-            const card = questionsCard.closest('.card');
-            card.style.display = 'block';
-        }
-    }
-
-    hideQuestions() {
-        // 問題セクションを非表示
-        const questionsCard = document.querySelector('.card h4');
-        if (questionsCard) {
-            const card = questionsCard.closest('.card');
-            card.style.display = 'none';
         }
     }
 

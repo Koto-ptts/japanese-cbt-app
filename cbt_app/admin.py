@@ -20,8 +20,8 @@ class TextAdmin(admin.ModelAdmin):
 
 @admin.register(Question)
 class QuestionAdmin(admin.ModelAdmin):
-    list_display = ['text', 'question_type', 'order', 'hide_text', 'created_at']
-    list_filter = ['question_type', 'hide_text', 'created_at']
+    list_display = ['text', 'question_type', 'order', 'hide_text', 'show_in_answering_phase', 'created_at']
+    list_filter = ['question_type', 'hide_text', 'show_in_answering_phase', 'created_at']
     search_fields = ['question_text', 'text__title']
     inlines = [QuestionChoiceInline]
     readonly_fields = ['created_at']

@@ -10,7 +10,7 @@ from django.utils import timezone
 import json
 
 from .models import (
-    Text, Question, UserProfile, StudentResponse, StudentAnnotation,
+    Text, Question, QuestionChoice, UserProfile, StudentResponse, StudentAnnotation,
     StudentActivityLog, ParagraphSummary, ConceptMap, ComparisonTable,
     ArgumentStructure, ActiveReadingContent, UserParagraphDefinition,
     ReadingSession
@@ -68,7 +68,20 @@ def dashboard(request):
 def text_detail(request, text_id):
     """文章詳細ページ"""
     text = get_object_or_404(Text, id=text_id, is_active=True)
-    questions = Question.objects.filter(text=text).order_by('order')
+    
+    # 読解セッションを取得または作成
+    session, created = ReadingSession.objects.get_or_create(
+        student=request.user,
+        text=text
+    )
+    
+    # フェーズに応じて問題を表示するかどうかを決定
+    questions = []
+    if session.current_phase == 'answering':
+        questions = Question.objects.filter(
+            text=text, 
+            show_in_answering_phase=True
+        ).order_by('order')
     
     # 生徒の注釈を取得
     annotations = StudentAnnotation.objects.filter(
@@ -80,6 +93,8 @@ def text_detail(request, text_id):
         'text': text,
         'questions': questions,
         'annotations': annotations,
+        'current_phase': session.current_phase,
+        'session': session,
     }
     
     return render(request, 'cbt_app/text_detail.html', context)
@@ -87,41 +102,78 @@ def text_detail(request, text_id):
 @login_required
 def question_detail(request, question_id):
     """問題詳細ページ"""
-    question = get_object_or_404(Question, id=question_id)
-    
-    # 既存の回答を取得
     try:
-        response = StudentResponse.objects.get(student=request.user, question=question)
-    except StudentResponse.DoesNotExist:
-        response = None
-    
-    if request.method == 'POST':
-        # 回答を保存
-        response_text = request.POST.get('response_text', '')
-        selected_choice_id = request.POST.get('selected_choice')
+        question = get_object_or_404(Question, id=question_id)
         
-        if response:
-            response.response_text = response_text
-            if selected_choice_id:
-                response.selected_choice_id = selected_choice_id
-            response.save()
-        else:
-            response = StudentResponse.objects.create(
-                student=request.user,
-                question=question,
-                response_text=response_text,
-                selected_choice_id=selected_choice_id if selected_choice_id else None
-            )
+        # 読解セッションの確認
+        try:
+            session = ReadingSession.objects.get(student=request.user, text=question.text)
+            if session.current_phase != 'answering':
+                messages.error(request, '解答フェーズに移行してから問題に回答してください。')
+                return redirect('cbt_app:text_detail', text_id=question.text.id)
+        except ReadingSession.DoesNotExist:
+            messages.error(request, '読解セッションが見つかりません。')
+            return redirect('cbt_app:text_detail', text_id=question.text.id)
         
-        messages.success(request, '回答を保存しました。')
-        return redirect('cbt_app:question_detail', question_id=question_id)
-    
-    context = {
-        'question': question,
-        'response': response,
-    }
-    
-    return render(request, 'cbt_app/question_detail.html', context)
+        # 既存の回答を取得
+        try:
+            response = StudentResponse.objects.get(student=request.user, question=question)
+        except StudentResponse.DoesNotExist:
+            response = None
+        
+        if request.method == 'POST':
+            try:
+                # 回答を保存
+                response_text = request.POST.get('response_text', '')
+                selected_choice_id = request.POST.get('selected_choice')
+                
+                if response:
+                    response.response_text = response_text
+                    if selected_choice_id:
+                        try:
+                            selected_choice = QuestionChoice.objects.get(id=selected_choice_id)
+                            response.selected_choice = selected_choice
+                        except QuestionChoice.DoesNotExist:
+                            response.selected_choice = None
+                    response.save()
+                else:
+                    # 新しい回答を作成
+                    selected_choice = None
+                    if selected_choice_id:
+                        try:
+                            selected_choice = QuestionChoice.objects.get(id=selected_choice_id)
+                        except QuestionChoice.DoesNotExist:
+                            selected_choice = None
+                    
+                    response = StudentResponse.objects.create(
+                        student=request.user,
+                        question=question,
+                        response_text=response_text,
+                        selected_choice=selected_choice
+                    )
+                
+                messages.success(request, '回答を保存しました。')
+                return redirect('cbt_app:question_detail', question_id=question_id)
+                
+            except Exception as e:
+                messages.error(request, f'回答の保存中にエラーが発生しました: {str(e)}')
+        
+        # 文章の表示制御
+        show_text = not question.hide_text
+        
+        context = {
+            'question': question,
+            'response': response,
+            'show_text': show_text,
+            'allow_notes_only': question.allow_notes_only,
+            'session': session,
+        }
+        
+        return render(request, 'cbt_app/question_detail.html', context)
+        
+    except Exception as e:
+        messages.error(request, f'問題の読み込み中にエラーが発生しました: {str(e)}')
+        return redirect('cbt_app:dashboard')
 
 # 教員専用機能
 def teacher_required(view_func):
@@ -194,7 +246,7 @@ def edit_student(request, student_id):
     
     return render(request, 'cbt_app/edit_student.html', {'student': student})
 
-# API関数群
+# API関数群（以下は元のコードと同じ）
 
 @login_required
 @csrf_exempt
@@ -714,17 +766,3 @@ def get_all_memos(request, text_id):
         
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)})
-
-# 一時的な管理者作成用（使用後は削除）
-def create_initial_admin(request):
-    from django.contrib.auth.models import User
-    from django.http import HttpResponse
-    
-    if not User.objects.filter(username='admin').exists():
-        User.objects.create_superuser(
-            username='admin',
-            email='admin@example.com',
-            password='TempPassword123!'  # 後で変更してください
-        )
-        return HttpResponse('管理者アカウントが作成されました。ログイン後、必ずパスワードを変更してください。')
-    return HttpResponse('管理者アカウントは既に存在します。')

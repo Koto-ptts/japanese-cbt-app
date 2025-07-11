@@ -1,0 +1,172 @@
+{% extends 'cbt_app/base.html' %}
+{% load static %}
+
+{% block title %}問題{{ question.order }} - {{ question.text.title }}{% endblock %}
+
+{% block content %}
+<div class="row">
+    {% if show_text %}
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5>{{ question.text.title }}</h5>
+                    {% if question.text.author %}
+                        <small class="text-muted">作者: {{ question.text.author }}</small>
+                    {% endif %}
+                </div>
+                <div class="card-body">
+                    <div class="text-content">
+                        {{ question.text.content|linebreaks }}
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+    {% else %}
+        <div class="col-md-12">
+            <div class="alert alert-warning text-center mb-4">
+                <h5>📵 文章非表示問題</h5>
+                <p>この問題では文章を参照できません。</p>
+                {% if allow_notes_only %}
+                    <p><strong>あなたが作成したメモのみ参照可能です。</strong></p>
+                    <button class="btn btn-info" onclick="showMemos()">📝 メモを確認</button>
+                {% endif %}
+            </div>
+    {% endif %}
+    
+            <div class="card">
+                <div class="card-header">
+                    <h4>問題 {{ question.order }}</h4>
+                </div>
+                <div class="card-body">
+                    <div class="question-text mb-4">
+                        {{ question.question_text|linebreaks }}
+                    </div>
+                    
+                    <form method="post">
+                        {% csrf_token %}
+                        
+                        {% if question.question_type == 'choice' %}
+                            <!-- 選択問題 -->
+                            {% for choice in question.choices.all %}
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input" type="radio" 
+                                           name="selected_choice" value="{{ choice.id }}" 
+                                           id="choice{{ choice.id }}"
+                                           {% if response.selected_choice.id == choice.id %}checked{% endif %}>
+                                    <label class="form-check-label" for="choice{{ choice.id }}">
+                                        {{ choice.choice_text }}
+                                    </label>
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <!-- 記述問題 -->
+                            <div class="mb-3">
+                                <label for="response_text" class="form-label">回答</label>
+                                <textarea class="form-control" id="response_text" name="response_text" 
+                                          rows="8" placeholder="ここに回答を記述してください...">{% if response %}{{ response.response_text }}{% endif %}</textarea>
+                            </div>
+                        {% endif %}
+                        
+                        <div class="d-flex justify-content-between">
+                            <button type="submit" class="btn btn-primary">回答を保存</button>
+                            <a href="{% url 'cbt_app:text_detail' question.text.id %}" class="btn btn-secondary">問題一覧に戻る</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+</div>
+
+<!-- メモ表示用モーダル -->
+<div class="modal fade" id="memosModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">📝 あなたが作成したメモ</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="memosContent">
+                <!-- メモの内容がここに表示される -->
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function showMemos() {
+    fetch(`/api/get-all-memos/{{ question.text.id }}/`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                displayMemos(data.memos);
+                new bootstrap.Modal(document.getElementById('memosModal')).show();
+            }
+        });
+}
+
+function displayMemos(memos) {
+    const content = document.getElementById('memosContent');
+    if (memos.length === 0) {
+        content.innerHTML = '<p class="text-muted">まだメモが作成されていません。</p>';
+        return;
+    }
+    
+    const groupedMemos = {};
+    memos.forEach(memo => {
+        if (!groupedMemos[memo.type]) {
+            groupedMemos[memo.type] = [];
+        }
+        groupedMemos[memo.type].push(memo);
+    });
+    
+    let html = '';
+    Object.keys(groupedMemos).forEach(type => {
+        const typeLabel = getTypeLabel(type);
+        html += `<h6>${typeLabel}</h6>`;
+        groupedMemos[type].forEach(memo => {
+            html += `
+                <div class="card mb-2">
+                    <div class="card-body">
+                        <h6 class="card-title">${memo.title}</h6>
+                        <p class="card-text">${formatMemoContent(memo)}</p>
+                        <small class="text-muted">${new Date(memo.created_at).toLocaleString('ja-JP')}</small>
+                    </div>
+                </div>
+            `;
+        });
+    });
+    
+    content.innerHTML = html;
+}
+
+function getTypeLabel(type) {
+    const labels = {
+        'paragraph': '📝 段落定義',
+        'logic-structure': '🔗 論理構造分析',
+        'causal-map': '⚡ 因果関係マップ',
+        'concept-map': '🗺️ 概念マップ',
+        'argument-analysis': '⚖️ 論証構造分析',
+        'perspective-analysis': '👁️ 多角的視点分析'
+    };
+    return labels[type] || type;
+}
+
+function formatMemoContent(memo) {
+    if (memo.content) return memo.content;
+    
+    const data = memo.data;
+    switch (memo.type) {
+        case 'logic-structure':
+            return `関係: ${data.logicType}<br>分析: ${data.description}`;
+        case 'causal-map':
+            return `原因: ${data.cause}<br>結果: ${data.effect}`;
+        default:
+            return JSON.stringify(data);
+    }
+}
+</script>
+{% endblock %}

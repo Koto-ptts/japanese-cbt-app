@@ -20,21 +20,36 @@
             </div>
         </div>
         
-        <!-- 問題一覧 -->
-        {% if questions %}
+        <!-- 問題一覧（解答フェーズでのみ表示） -->
+        {% if current_phase == 'answering' and questions %}
             <div class="card mt-4">
                 <div class="card-header">
                     <h4>問題</h4>
+                    <small class="text-muted">解答フェーズ - あなたが作成したメモを参考に回答してください</small>
                 </div>
                 <div class="card-body">
                     {% for question in questions %}
                         <div class="mb-3 p-3 border rounded">
                             <h5>問題 {{ question.order }}</h5>
                             <p>{{ question.question_text|linebreaks }}</p>
-                            <a href="{% url 'cbt_app:question_detail' question.id %}" class="btn btn-primary">回答する</a>
+                            {% if question.hide_text %}
+                                <small class="text-warning">📵 この問題では文章を参照できません</small>
+                            {% endif %}
+                            {% if question.allow_notes_only %}
+                                <small class="text-info">📝 メモのみ参照可能</small>
+                            {% endif %}
+                            <div class="mt-2">
+                                <a href="{% url 'cbt_app:question_detail' question.id %}" class="btn btn-primary">回答する</a>
+                            </div>
                         </div>
                     {% endfor %}
                 </div>
+            </div>
+        {% elif current_phase == 'reading' %}
+            <div class="alert alert-info mt-4">
+                <h5>📖 読解フェーズ</h5>
+                <p>現在は読解フェーズです。文章をじっくり読み、分析ツールを使って理解を深めてください。</p>
+                <p>問題は解答フェーズに移行してから表示されます。</p>
             </div>
         {% endif %}
     </div>
